@@ -1,0 +1,33 @@
+.halfDay {
+  background-color: var(--iris-9);
+  border: 3px solid var(--iris-9);
+  transition: 0.2s;
+}
+.halfDay:hover {
+  color: var(--iris-9);
+  border: 3px solid var(--iris-9);
+  background-color: white;
+}
+
+.fullDay {
+  background-color: var(--green-9);
+  border: 3px solid var(--green-9);
+  transition: 0.2s;
+}
+.fullDay:hover {
+  color: var(--green-9);
+  border: 3px solid var(--green-9);
+  background-color: white;
+}
+
+.startOfRange {
+  border-radius: 50% 0 0 50%;
+}
+
+.endOfRange {
+  border-radius: 0 50% 50% 0;
+}
+
+.middleOfRange {
+  border-radius: 0;
+}
