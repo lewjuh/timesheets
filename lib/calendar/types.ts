@@ -13,6 +13,7 @@ export type DateRange = {
   start: DateWithType;
   end?: DateWithType;
   id: string;
+  allValues?: DateWithType[];
 };
 
 export const IsFullDay = (dateWithType: DateWithType): boolean =>

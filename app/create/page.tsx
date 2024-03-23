@@ -2,7 +2,13 @@
 import { DayPicker, Matcher } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { useState } from "react";
-import { format, isAfter, isBefore, isSameDay } from "date-fns";
+import {
+  eachDayOfInterval,
+  format,
+  isAfter,
+  isBefore,
+  isSameDay,
+} from "date-fns";
 import style from "./style.module.css";
 import * as ToggleGroup from "@radix-ui/react-toggle-group";
 import {
@@ -22,7 +28,7 @@ import {
   Button,
 } from "@radix-ui/themes";
 import * as ScrollArea from "@radix-ui/react-scroll-area";
-import { DateWithType, DayType } from "../../lib/calendar/types";
+import { DateRange, DateWithType, DayType } from "../../lib/calendar/types";
 import DateTable from "@/components/calendar/date-table";
 import useDateState from "@/lib/hooks/use-date-state";
 import { datesWithTypeAsDates } from "@/lib/utils/days";
@@ -44,6 +50,9 @@ export default function Create() {
     days,
     dayType,
     handleSelectDate,
+    handleSelectDates,
+    removeDate,
+    removeDates,
     daysWithRanges,
     isDayType,
     setDayType,
@@ -52,11 +61,77 @@ export default function Create() {
     isStartOfRange,
     isEndOfRange,
     isMiddleOfRange,
+    isDateSelected,
   } = useDateState(initialDays);
+
+  const [dragDates, setDragDates] = useState<Date[]>([]);
+  const [dayFocused, setDayFocused] = useState<Date | null>(null);
+  const [dayDragging, setDayDragging] = useState<Boolean>(false);
+  const [dragRemoveFlag, setDragRemoveFlag] = useState<Boolean>(false);
 
   const isDateHalfDay: Matcher = (date: Date) => isDayType(date, DayType.Half);
 
   const isDateFullDay: Matcher = (date: Date) => isDayType(date, DayType.Full);
+
+  const handleDelete = (range: DateRange) => {
+    console.log("delete", range);
+    if (range) {
+      removeDate(range);
+    }
+  };
+
+  const handleDraggingSelect = (date: Date) => {
+    let draggingDates: Date[] = dragDates;
+    if (dayDragging && dayFocused) {
+      if (
+        dayFocused &&
+        !draggingDates.some((draggingDate) =>
+          isSameDay(draggingDate, dayFocused),
+        )
+      ) {
+        draggingDates.push(dayFocused);
+      }
+
+      if (
+        !draggingDates.some((draggingDate) => isSameDay(draggingDate, date))
+      ) {
+        draggingDates.push(date);
+      }
+
+      if (draggingDates.length > 1) {
+        let startDate: Date;
+        let endDate: Date;
+
+        if (isBefore(date, dayFocused)) {
+          startDate = date;
+          endDate = dayFocused;
+        } else {
+          startDate = dayFocused;
+          endDate = date;
+        }
+
+        draggingDates = eachDayOfInterval({ start: startDate, end: endDate });
+      }
+    }
+    setDragDates(draggingDates);
+  };
+
+  const handleDraggedDates = () => {
+    if (dragDates.length === 0) return;
+    const sortedDates = dragDates.sort((a, b) => {
+      if (isBefore(a, b)) return -1;
+      if (isAfter(a, b)) return 1;
+      return 0;
+    });
+
+    if (dayFocused && isDayType(dayFocused, dayType)) {
+      removeDates(sortedDates);
+    } else {
+      handleSelectDates(sortedDates);
+    }
+
+    setDragDates([]);
+  };
 
   return (
     <AnimatePresence>
@@ -160,18 +235,38 @@ export default function Create() {
                     </Tooltip.Provider>
                   </ToggleGroup.Root>
                 </Box>
-                <Box>
+                <Box
+                  onMouseUp={() => {
+                    setDayDragging(false);
+                    handleDraggedDates();
+                    setDragRemoveFlag(false);
+                    setDayFocused(null);
+                  }}
+                  onMouseDown={() => {
+                    setDragDates([]);
+                    setDayDragging(true);
+                  }}
+                >
                   <DayPicker
                     mode="multiple"
                     min={1}
-                    selected={datesWithTypeAsDates(days)}
-                    onDayClick={handleSelectDate}
+                    selected={datesWithTypeAsDates(days) && dragDates}
+                    onDayClick={(e) => {
+                      handleSelectDate(e);
+                    }}
+                    onDayFocus={(e) => {
+                      setDayFocused(e);
+                    }}
+                    onDayMouseEnter={(e) => {
+                      handleDraggingSelect(e);
+                    }}
                     modifiersClassNames={{
                       fullDay: style.fullDay,
                       halfDay: style.halfDay,
                       startOfRange: style.startOfRange,
                       endOfRange: style.endOfRange,
                       middleOfRange: style.middleOfRange,
+                      selected: style.selected,
                     }}
                     modifiers={{
                       fullDay: isDateFullDay,
@@ -187,12 +282,13 @@ export default function Create() {
                 <Table.Root variant="ghost" className="rounded-t-none">
                   <Table.Header>
                     <Table.Row>
-                      <Table.ColumnHeaderCell className="w-3/4">
+                      <Table.ColumnHeaderCell className="w-4/6">
                         Date
                       </Table.ColumnHeaderCell>
-                      <Table.ColumnHeaderCell className="w-1/4">
+                      <Table.ColumnHeaderCell className="w-1/6">
                         Type
                       </Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell className="w-1/6 text-center"></Table.ColumnHeaderCell>
                     </Table.Row>
                   </Table.Header>
                 </Table.Root>
@@ -202,7 +298,10 @@ export default function Create() {
                   type="auto"
                 >
                   <ScrollArea.Viewport className="h-full w-full ">
-                    <DateTable dates={daysWithRanges} />
+                    <DateTable
+                      dates={daysWithRanges}
+                      onClickDelete={handleDelete}
+                    />
                   </ScrollArea.Viewport>
                   <ScrollArea.Scrollbar
                     className="flex touch-none select-none bg-blackA1 p-0.5 transition-colors duration-[160ms] ease-out hover:bg-blackA3 data-[orientation=horizontal]:h-2.5 data-[orientation=vertical]:w-2.5 data-[orientation=horizontal]:flex-col"

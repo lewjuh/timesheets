@@ -31,3 +31,9 @@
 .middleOfRange {
   border-radius: 0;
 }
+
+.selected {
+  background: var(--amber-9);
+  border-color: var(--amber-9);
+  color: var(--amber-11);
+}

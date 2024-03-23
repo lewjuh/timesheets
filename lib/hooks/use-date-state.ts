@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { DateWithType, DayType } from "../calendar/types";
+import { DateRange, DateWithType, DayType } from "../calendar/types";
 import { format, isSameDay } from "date-fns";
 import { isDateWithinRange } from "../utils/days";
 
@@ -13,9 +13,10 @@ function useDateState(initialState: DateWithType[]) {
     const sortedDays = days
       .slice()
       .sort((a, b) => a.date.getTime() - b.date.getTime());
-    const ranges = [];
+    const ranges: DateRange[] = [];
     let start = sortedDays[0];
     let end = sortedDays[0];
+    let allDates: DateWithType[] = [start];
 
     for (let i = 1; i < sortedDays.length; i++) {
       const currentDay = sortedDays[i];
@@ -26,28 +27,64 @@ function useDateState(initialState: DateWithType[]) {
       );
 
       if (diffInDays === 1 && currentDay.type === previousDay.type) {
+        allDates.push(currentDay);
         end = currentDay;
       } else {
         ranges.push(
           start.date.getTime() === end.date.getTime()
             ? { start, id: start.id }
-            : { start, end, id: start.id },
+            : { start, end, id: start.id, allValues: allDates },
         );
         start = currentDay;
         end = currentDay;
+        allDates = [currentDay];
       }
     }
 
     ranges.push(
       start.date.getTime() === end.date.getTime()
         ? { start, id: start.id }
-        : { start, end, id: start.id },
+        : { start, end, id: start.id, allValues: allDates },
     );
 
     return ranges;
   }, [days]);
 
+  const updateDaysWithDate = (
+    updatedDays: DateWithType[],
+    dateWithType: DateWithType,
+    removeIfExists: boolean,
+  ) => {
+    // Check if the date already exists in the updatedDays
+    const existingDay = updatedDays.find((day) =>
+      isSameDay(day.date, dateWithType.date),
+    );
+
+    // If the date exists and its type is the same, remove it if removeIfExists is true, otherwise update it
+    // If the date exists and its type is different, update it
+    // If the date doesn't exist, add it
+    if (existingDay) {
+      dateWithType.id = existingDay.id;
+      if (existingDay.type === dateWithType.type) {
+        if (removeIfExists) {
+          return updatedDays.filter(
+            (day) => !isSameDay(day.date, dateWithType.date),
+          );
+        } else {
+          return updatedDays;
+        }
+      } else {
+        return updatedDays.map((day) =>
+          isSameDay(day.date, dateWithType.date) ? dateWithType : day,
+        );
+      }
+    } else {
+      return [...updatedDays, dateWithType];
+    }
+  };
+
   const handleSelectDate = (selectedDate: Date | undefined) => {
+    console.log("handleSelectDate", selectedDate);
     if (selectedDate) {
       const dateWithType: DateWithType = {
         date: selectedDate,
@@ -55,39 +92,42 @@ function useDateState(initialState: DateWithType[]) {
         id: new Date().getUTCMilliseconds().toString(),
       };
 
-      if (!days) {
-        setDays([dateWithType]);
-        return;
-      }
-
-      // Check if the date already exists in the days state
-      const existingDay = days.find((day) =>
-        isSameDay(day.date, dateWithType.date),
-      );
-
-      // If the date exists and its type is the same, remove it
-      // If the date exists and its type is different, update it
-      // If the date doesn't exist, add it
-      let updatedDays;
-      if (existingDay) {
-        dateWithType.id = existingDay.id;
-        if (existingDay.type === dateWithType.type) {
-          updatedDays = days.filter(
-            (day) => !isSameDay(day.date, dateWithType.date),
-          );
-        } else {
-          updatedDays = days.map((day) =>
-            isSameDay(day.date, dateWithType.date) ? dateWithType : day,
-          );
-        }
-      } else {
-        updatedDays = [...days, dateWithType];
-      }
-
+      let updatedDays = days ? [...days] : [];
+      updatedDays = updateDaysWithDate(updatedDays, dateWithType, true);
       setDays(updatedDays);
     } else {
       setDays(undefined);
     }
+  };
+
+  const handleSelectDates = (selectedDates: Date[]) => {
+    console.log("handleSelectDates", selectedDates);
+    if (selectedDates.length === 0) {
+      setDays(undefined);
+      return;
+    }
+
+    let updatedDays = days ? [...days] : [];
+
+    selectedDates.forEach((selectedDate) => {
+      const dateWithType: DateWithType = {
+        date: selectedDate,
+        type: dayType,
+        id: new Date().getUTCMilliseconds().toString(),
+      };
+
+      updatedDays = updateDaysWithDate(updatedDays, dateWithType, false);
+    });
+
+    setDays(updatedDays);
+  };
+
+  const removeDates = (dates: Date[]) => {
+    if (!days) return;
+    const updatedDays = days.filter(
+      (day) => !dates.find((date) => isSameDay(date, day.date)),
+    );
+    setDays(updatedDays);
   };
 
   function isDayType(date: Date, type: DayType) {
@@ -128,11 +168,38 @@ function useDateState(initialState: DateWithType[]) {
   const isDateTypeFullDay = dayType === DayType.Full;
   const isDateTypeHalfDay = dayType === DayType.Half;
 
+  const isDateSelected = (date: Date) => {
+    if (!days) return false;
+    return days.find((d) => isSameDay(d.date, date)) !== undefined;
+  };
+
+  const removeDate = (range: DateRange) => {
+    if (!days) return;
+    if (range.allValues) {
+      const updatedDays = days.filter(
+        (day) => !range.allValues?.find((d) => isSameDay(d.date, day.date)),
+      );
+      setDays(updatedDays);
+      return;
+    } else {
+      const updatedDays = days.filter(
+        (day) =>
+          !isSameDay(day.date, range.start.date) &&
+          (!range.end || !isSameDay(day.date, range.end.date)),
+      );
+      setDays(updatedDays);
+      return;
+    }
+  };
+
   return {
     days,
     dayType,
     daysWithRanges,
     handleSelectDate,
+    handleSelectDates,
+    removeDate,
+    removeDates,
     setDayType,
     isMiddleOfRange,
     isEndOfRange,
@@ -140,6 +207,7 @@ function useDateState(initialState: DateWithType[]) {
     isDayType,
     isDateTypeFullDay,
     isDateTypeHalfDay,
+    isDateSelected,
   };
 }
 
